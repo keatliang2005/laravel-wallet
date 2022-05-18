@@ -24,6 +24,7 @@ final class PrepareService implements PrepareServiceInterface
         private DiscountServiceInterface $personalDiscountService,
         private ConsistencyServiceInterface $consistencyService,
         private ExtraDtoAssemblerInterface $extraDtoAssembler,
+        private ExchangeServiceInterface $exchangeService,
         private CastServiceInterface $castService,
         private MathServiceInterface $mathService,
         private TaxServiceInterface $taxService
@@ -93,6 +94,11 @@ final class PrepareService implements PrepareServiceInterface
         $amountWithoutDiscount = $this->mathService->sub($cost->getValue(), $discount, $toWallet->decimal_places);
         $depositAmount = $this->mathService->compare($amountWithoutDiscount, 0) === -1 ? '0' : $amountWithoutDiscount;
         $withdrawAmount = $this->mathService->add($depositAmount, $fee, $from->decimal_places);
+        $withdrawCost = $cost->getCurrency() === null
+            ? $withdrawAmount
+            : $this->exchangeService->convertTo($cost->getCurrency(), $from->currency, $withdrawAmount);
+
+        $withdrawCostFloor = $this->mathService->floor($withdrawCost);
         $extra = $this->extraDtoAssembler->create($meta);
         $withdrawOption = $extra->getWithdrawOption();
         $depositOption = $extra->getDepositOption();
@@ -102,7 +108,7 @@ final class PrepareService implements PrepareServiceInterface
             $toWallet,
             $discount,
             $fee,
-            $this->withdraw($from, $withdrawAmount, $withdrawOption->getMeta(), $withdrawOption->isConfirmed()),
+            $this->withdraw($from, $withdrawCostFloor, $withdrawOption->getMeta(), $withdrawOption->isConfirmed()),
             $this->deposit($toWallet, $depositAmount, $depositOption->getMeta(), $depositOption->isConfirmed()),
             $status
         );
